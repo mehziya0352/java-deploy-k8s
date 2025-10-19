@@ -1,41 +1,16 @@
-module "eks" {
-  source  = "terraform-aws-modules/eks/aws"
-  version = "19.0.0" # pick a compatible version; adjust if needed
+# -----------------------
+# Get availability zones
+# -----------------------
+data "aws_availability_zones" "available" {}
 
-  cluster_name    = var.cluster_name
-  cluster_version = "1.27"   # or a K8s version supported in your region; change if needed
-  subnets         = module.vpc.private_subnets
-
-  # Create new VPC automatically
-  vpc_id = module.vpc.vpc_id
-
-  manage_aws_auth = true
-
-  node_groups = {
-    regapp_nodes = {
-      desired_capacity = var.node_desired_capacity
-      min_capacity     = var.node_min_capacity
-      max_capacity     = var.node_max_capacity
-
-      instance_types = [var.node_instance_type]
-
-      # Optional - attach common tags
-      tags = {
-        Name = "${var.cluster_name}-node"
-      }
-    }
-  }
-
-  tags = {
-    Project = "regapp"
-  }
-}
-
+# -----------------------
+# VPC Module
+# -----------------------
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
-  version = "4.0.0"
+  version = "5.1.2"
 
-  name = "${var.cluster_name}-vpc"
+  name = "regapp-vpc"
   cidr = "10.100.0.0/16"
 
   azs             = slice(data.aws_availability_zones.available.names, 0, 3)
@@ -51,4 +26,33 @@ module "vpc" {
   }
 }
 
-data "aws_availability_zones" "available" {}
+# -----------------------
+# EKS Cluster Module
+# -----------------------
+module "eks" {
+  source  = "terraform-aws-modules/eks/aws"
+  version = "21.4.0"
+
+  name                 = var.cluster_name
+  kubernetes_version   = "1.27"
+  vpc_id               = module.vpc.vpc_id
+  subnet_ids           = module.vpc.private_subnets
+
+  eks_managed_node_groups = {
+    regapp_nodes = {
+      desired_size  = var.node_desired_capacity
+      min_size      = var.node_min_capacity
+      max_size      = var.node_max_capacity
+      instance_types = [var.node_instance_type]
+
+      tags = {
+        Name = "${var.cluster_name}-node"
+      }
+    }
+  }
+
+  tags = {
+    Project = "regapp"
+  }
+}
+
